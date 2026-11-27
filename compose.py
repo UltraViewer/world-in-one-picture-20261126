@@ -1,257 +1,285 @@
 #!/usr/bin/env python3
-"""Draw the 26 November 2026 world-news front page, 'The World in One Picture'.
+"""Render the 26 November 2026 front page: 'The World in One Picture'.
 
-Every fact on the page was verified against Reuters / AP / BBC / DW reporting
-of Thursday 26 November 2026 before drawing. No figure is invented: captions
-carry only numbers that appear in those reports. The picture is drawn with PIL
-primitives only -- no photos, no network, no randomness -- so two runs produce
-identical bytes.
+A single-file PIL drawing. Everything is drawn with vector shapes and
+Liberation fonts; no photos, no network, no randomness outside a fixed
+seed, so repeated runs produce byte-identical PNG output.
 """
+import math
+import random
+
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 1024, 1024
-PAPER = (246, 241, 229)
-INK = (17, 17, 17)
-RED = (163, 22, 33)
-NAVY = (27, 42, 74)
-GREY = (90, 88, 80)
-
-SERIF_B = "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
-SERIF = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
-SANS_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-SANS = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+CREAM = (246, 241, 227)
+INK = (26, 26, 26)
+RED = (178, 34, 34)
+GRAY = (110, 105, 92)
+RULE = (40, 40, 40)
+FONT_DIR = "/usr/share/fonts/truetype/liberation/"
 
 
-def font(path, size):
-    return ImageFont.truetype(path, size)
+def font(name, size):
+    return ImageFont.truetype(FONT_DIR + name, size)
 
 
-def wrap(d, text, f, width):
-    lines, cur = [], ""
-    for w in text.split():
-        t = (cur + " " + w).strip()
-        if d.textlength(t, font=f) <= width:
-            cur = t
+SERIF_B = lambda s: font("LiberationSerif-Bold.ttf", s)
+SERIF = lambda s: font("LiberationSerif-Regular.ttf", s)
+SANS_B = lambda s: font("LiberationSans-Bold.ttf", s)
+SANS = lambda s: font("LiberationSans-Regular.ttf", s)
+
+
+def wrap(draw, text, fnt, max_w):
+    """Greedy word wrap returning a list of lines that fit max_w."""
+    words, lines, cur = text.split(), [], ""
+    for word in words:
+        trial = (cur + " " + word).strip()
+        if draw.textlength(trial, font=fnt) <= max_w:
+            cur = trial
         else:
             if cur:
                 lines.append(cur)
-            cur = w
+            cur = word
     if cur:
         lines.append(cur)
     return lines
 
 
-def para(d, text, f, x, y, width, leading, color=INK):
-    for line in wrap(d, text, f, width):
-        d.text((x, y), line, font=f, fill=color)
+def para(draw, x, y, text, fnt, max_w, leading, color=INK):
+    """Draw wrapped text, return the y just below the last line."""
+    for line in wrap(draw, text, fnt, max_w):
+        draw.text((x, y), line, font=fnt, fill=color)
         y += leading
     return y
 
 
-def rule(d, x0, y, x1, width=2, color=INK):
-    d.line([(x0, y), (x1, y)], fill=color, width=width)
+def star(d, cx, cy, r_out, r_in, points, color):
+    pts = []
+    for i in range(points * 2):
+        r = r_out if i % 2 == 0 else r_in
+        a = math.pi * i / points - math.pi / 2
+        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    d.polygon(pts, fill=color)
 
 
-def gradient(d, box, top, bottom):
-    x0, y0, x1, y1 = box
-    n = y1 - y0
-    for i in range(n):
-        t = i / max(1, n - 1)
-        c = tuple(int(top[k] + (bottom[k] - top[k]) * t) for k in range(3))
-        d.line([(x0, y0 + i), (x1, y0 + i)], fill=c)
+def night_panel(d, x, y, w, h):
+    """Kuwait night scene: dark sky, moon, radar tower, blast, drones."""
+    for i in range(h):
+        t = i / h
+        d.line([(x, y + i), (x + w, y + i)],
+               fill=(int(26 + (13 - 26) * t), int(42 + (21 - 42) * t),
+                     int(68 + (38 - 68) * t)))
+    rng = random.Random(26)
+    for _ in range(46):
+        sx, sy = x + rng.randint(4, w - 4), y + rng.randint(4, h - 90)
+        r = rng.choice([1, 1, 2])
+        d.ellipse([sx - r, sy - r, sx + r, sy + r],
+                  fill=(235, 235, 220) if rng.random() < 0.7 else (180, 180, 170))
+    # Moon with craters, upper right.
+    mx, my, mr = x + w - 62, y + 52, 26
+    d.ellipse([mx - mr, my - mr, mx + mr, my + mr], fill=(232, 224, 200))
+    d.ellipse([mx - 12, my - 6, mx + 2, my + 8], fill=(205, 196, 168))
+    d.ellipse([mx + 6, my + 8, mx + 16, my + 18], fill=(210, 202, 176))
+    # Ground strip with a dashed road line.
+    gy = y + h - 34
+    d.rectangle([x, gy, x + w, y + h], fill=(10, 15, 28))
+    for dx in range(x + 8, x + w - 8, 26):
+        d.line([(dx, gy + 17), (dx + 13, gy + 17)], fill=(90, 100, 120), width=2)
+    # Radar tower silhouette, left third.
+    d.polygon([(x + 62, gy), (x + 78, y + 118), (x + 104, y + 118),
+               (x + 120, gy)], fill=(8, 10, 18))
+    d.rectangle([x + 70, y + 112, x + 112, y + 120], fill=(8, 10, 18))
+    # Radar dish arcs above the tower.
+    d.arc([x + 52, y + 62, x + 130, y + 140], start=200, end=340,
+          fill=(200, 200, 190), width=3)
+    d.arc([x + 66, y + 76, x + 116, y + 126], start=200, end=340,
+          fill=(200, 200, 190), width=2)
+    # Blast starburst at the dish.
+    star(d, x + 92, y + 96, 44, 18, 8, (245, 166, 35))
+    star(d, x + 92, y + 96, 26, 11, 8, (255, 220, 90))
+    d.ellipse([x + 80, y + 84, x + 104, y + 108], fill=(255, 240, 170))
+    # Two small drones with red navigation lights.
+    for dx, dy in ((x + 268, y + 96), (x + 330, y + 150)):
+        d.rounded_rectangle([dx - 26, dy - 4, dx + 26, dy + 4], radius=4,
+                            fill=(210, 210, 200))
+        d.ellipse([dx - 3, dy - 3, dx + 3, dy + 3], fill=(220, 40, 40))
+    # Second, smaller tower silhouette on the right.
+    d.polygon([(x + 398, gy), (x + 408, y + 168), (x + 428, y + 168),
+               (x + 438, gy)], fill=(8, 10, 18))
+    d.ellipse([x + 402, y + 156, x + 434, y + 178], fill=(8, 10, 18))
 
 
-def hero_panel(d, box):
-    """Night over the Gulf: radar station, drones, one blast. Pure drawing."""
-    x0, y0, x1, y1 = box
-    gradient(d, box, (13, 27, 46), (39, 65, 86))
-    # stars, fixed positions
-    for sx, sy, r in [(60, 30, 2), (150, 55, 1), (240, 25, 2), (330, 60, 1),
-                      (420, 35, 2), (490, 70, 1), (110, 90, 1), (290, 95, 2),
-                      (450, 110, 1), (200, 120, 1)]:
-        d.ellipse([x0 + sx - r, y0 + sy - r, x0 + sx + r, y0 + sy + r],
-                  fill=(220, 225, 235))
-    # moon
-    d.ellipse([x1 - 90, y0 + 22, x1 - 40, y0 + 72], fill=(232, 228, 205))
-    d.ellipse([x1 - 82, y0 + 30, x1 - 58, y0 + 54], fill=(205, 200, 175))
-    # sea horizon
-    d.rectangle([x0, y1 - 78, x1, y1], fill=(16, 28, 40))
-    d.line([(x0, y1 - 78), (x1, y1 - 78)], fill=(120, 140, 165), width=2)
-    for gx in range(x0 + 20, x1 - 10, 46):
-        d.line([(gx, y1 - 72), (gx + 26, y1 - 72)], fill=(70, 90, 115), width=1)
-    # radar tower silhouette
-    tx = x0 + 130
-    d.polygon([(tx - 16, y1 - 78), (tx + 16, y1 - 78), (tx + 7, y1 - 200),
-               (tx - 7, y1 - 200)], fill=(8, 12, 18))
-    d.rectangle([tx - 34, y1 - 216, tx + 34, y1 - 200], fill=(8, 12, 18))
-    # radar dish
-    d.arc([tx - 58, y1 - 268, tx + 58, y1 - 176], start=200, end=340,
-          fill=(200, 205, 215), width=5)
-    d.line([(tx, y1 - 216), (tx - 46, y1 - 258)], fill=(200, 205, 215), width=4)
-    d.line([(tx, y1 - 216), (tx + 46, y1 - 258)], fill=(200, 205, 215), width=4)
-    # second, smaller tower
-    tx2 = x0 + 400
-    d.polygon([(tx2 - 10, y1 - 78), (tx2 + 10, y1 - 78), (tx2 + 4, y1 - 150),
-               (tx2 - 4, y1 - 150)], fill=(8, 12, 18))
-    d.ellipse([tx2 - 16, y1 - 172, tx2 + 16, y1 - 140], fill=(8, 12, 18))
-    # drones: small quadcopters with red lights
-    for dx, dy in [(x0 + 300, y0 + 60), (x0 + 360, y0 + 105)]:
-        d.ellipse([dx - 9, dy - 5, dx + 9, dy + 5], fill=(30, 34, 40))
-        d.line([(dx - 20, dy - 8), (dx + 20, dy - 8)], fill=(160, 165, 175), width=3)
-        d.line([(dx - 20, dy + 8), (dx + 20, dy + 8)], fill=(160, 165, 175), width=3)
-        d.ellipse([dx - 2, dy - 2, dx + 2, dy + 2], fill=(255, 60, 50))
-    # explosion burst at the dish
-    bx, by = tx + 30, y1 - 240
-    for r, col in [(46, (255, 122, 26)), (32, (255, 176, 32)),
-                   (18, (255, 232, 150))]:
-        pts = []
-        for k in range(16):
-            ang = 3.14159 * k / 8
-            rr = r if k % 2 == 0 else r * 0.55
-            pts.append((bx + rr * 1.0 * __import__("math").cos(ang),
-                        by + rr * 1.0 * __import__("math").sin(ang)))
-        d.polygon(pts, fill=col)
+def city_panel(d, x, y, w, h):
+    """Gaza dusk: orange sky, dark building silhouettes, smoke."""
+    for i in range(h):
+        t = i / h
+        d.line([(x, y + i), (x + w, y + i)],
+               fill=(int(198 + (122 - 198) * t), int(138 + (74 - 138) * t),
+                     int(61 + (30 - 61) * t)))
+    rng = random.Random(7)
+    # Low sun disc behind the skyline.
+    d.ellipse([x + w - 96, y + 18, x + w - 36, y + 78], fill=(240, 200, 120))
+    heights = [62, 88, 54, 96, 70, 84, 58, 92]
+    bw = w // len(heights)
+    for i, bh in enumerate(heights):
+        bx = x + i * bw
+        d.rectangle([bx, y + h - bh, bx + bw - 3, y + h], fill=(46, 26, 14))
+        d.polygon([(bx, y + h - bh), (bx + (bw - 3) // 2, y + h - bh - 14),
+                   (bx + bw - 3, y + h - bh)], fill=(46, 26, 14))
+    for _ in range(7):
+        sx, sy = x + rng.randint(20, w - 20), y + rng.randint(2, 26)
+        r = rng.randint(9, 16)
+        d.ellipse([sx - r, sy - r, sx + r, sy + r], fill=(120, 105, 88))
 
 
-def gaza_panel(d, box):
-    """Dusk skyline, damaged buildings, smoke. Pure drawing."""
-    x0, y0, x1, y1 = box
-    gradient(d, box, (122, 74, 52), (196, 138, 84))
-    d.ellipse([x1 - 70, y0 + 12, x1 - 26, y0 + 56], fill=(238, 200, 140))
-    for bx, bw, bh in [(0, 70, 46), (78, 52, 66), (138, 84, 38),
-                       (230, 60, 58), (298, 74, 42), (380, 56, 62)]:
-        d.rectangle([x0 + bx, y1 - bh, x0 + bx + bw, y1], fill=(52, 34, 28))
-        d.polygon([(x0 + bx, y1 - bh), (x0 + bx + bw // 2, y1 - bh - 12),
-                   (x0 + bx + bw, y1 - bh)], fill=(52, 34, 28))
-    for sx, sy, r in [(150, 18, 14), (168, 4, 18), (300, 22, 12), (316, 8, 15)]:
-        d.ellipse([x0 + sx - r, y0 + sy - r, x0 + sx + r, y0 + sy + r],
-                  fill=(120, 105, 95))
-
-
-def ebola_panel(d, box):
-    """Abstract virus motif on deep red. No numbers drawn here."""
-    x0, y0, x1, y1 = box
-    d.rectangle(box, fill=(104, 16, 22))
-    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+def virus_panel(d, x, y, w, h):
+    """Ebola panel: deep red field with a stylised virus glyph."""
+    d.rectangle([x, y, x + w, y + h], fill=(122, 22, 32))
+    cx, cy = x + 96, y + h // 2
     for k in range(12):
-        ang = 3.14159 * k / 6
-        ex = cx + 34 * __import__("math").cos(ang)
-        ey = cy + 34 * __import__("math").sin(ang)
-        d.line([(cx, cy), (ex, ey)], fill=(214, 90, 80), width=4)
-        d.ellipse([ex - 5, ey - 5, ex + 5, ey + 5], fill=(232, 140, 125))
-    d.ellipse([cx - 24, cy - 24, cx + 24, cy + 24], fill=(168, 40, 44))
-    d.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], fill=(214, 90, 80))
-    for dx, dy, r in [(-58, -16, 4), (62, 14, 5), (-40, 22, 3), (44, -22, 4)]:
-        d.ellipse([cx + dx - r, cy + dy - r, cx + dx + r, cy + dy + r],
-                  fill=(232, 140, 125))
+        a = math.pi * 2 * k / 12
+        ex, ey = cx + 44 * math.cos(a), cy + 44 * math.sin(a)
+        d.line([(cx + 26 * math.cos(a), cy + 26 * math.sin(a)), (ex, ey)],
+               fill=(205, 90, 90), width=4)
+        d.ellipse([ex - 6, ey - 6, ex + 6, ey + 6], fill=(225, 130, 120))
+    d.ellipse([cx - 30, cy - 30, cx + 30, cy + 30], fill=(196, 70, 70))
+    d.ellipse([cx - 18, cy - 18, cx + 18, cy + 18], fill=(225, 120, 110))
+    for k in range(5):
+        a = math.pi * 2 * k / 5 + 0.6
+        d.ellipse([cx + 40 * math.cos(a) - 4, cy + 40 * math.sin(a) - 4,
+                   cx + 40 * math.cos(a) + 4, cy + 40 * math.sin(a) + 4],
+                  fill=(215, 110, 100))
 
 
-def eu_stars(d, cx, cy, r):
-    d.rectangle([cx - 42, cy - 42, cx + 42, cy + 42], fill=(0, 51, 153))
+def eu_flag(d, x, y, s):
+    d.rectangle([x, y, x + s, y + s], fill=(0, 51, 153))
+    cx, cy, r = x + s / 2, y + s / 2, s * 0.32
     for k in range(12):
-        ang = -3.14159 / 2 + 3.14159 * k / 6
-        sx = cx + int(r * __import__("math").cos(ang))
-        sy = cy + int(r * __import__("math").sin(ang))
-        d.ellipse([sx - 3, sy - 3, sx + 3, sy + 3], fill=(255, 204, 0))
+        a = math.pi * 2 * k / 12 - math.pi / 2
+        star(d, cx + r * math.cos(a), cy + r * math.sin(a), 5, 2, 5,
+             (255, 204, 0))
 
 
-def macys_panel(d, box):
-    """Storm clouds and two grounded balloons. Pure drawing."""
-    x0, y0, x1, y1 = box
-    gradient(d, box, (70, 78, 92), (140, 148, 160))
-    for cx, cy, r in [(50, 22, 26), (90, 14, 30), (130, 26, 22), (200, 18, 28)]:
-        d.ellipse([x0 + cx - r, y0 + cy - r // 2, x0 + cx + r, y0 + cy + r // 2],
-                  fill=(88, 96, 110))
-    # deflated balloon on the ground, tilted
-    d.ellipse([x0 + 30, y1 - 46, x0 + 120, y1 - 6], fill=(200, 60, 70))
-    d.line([(x0 + 55, y1 - 40), (x0 + 95, y1 - 12)], fill=(120, 30, 40), width=3)
-    d.line([(x0 + 95, y1 - 40), (x0 + 55, y1 - 12)], fill=(120, 30, 40), width=3)
-    d.ellipse([x0 + 165, y1 - 40, x0 + 225, y1 - 8], fill=(60, 110, 200))
-    d.line([(x0 + 180, y1 - 36), (x0 + 210, y1 - 12)], fill=(30, 60, 120), width=3)
+def balloons(d, x, y, w, h):
+    """Macy's thumbnail: grey sky, one red and one blue balloon."""
+    for i in range(h):
+        t = i / h
+        d.line([(x, y + i), (x + w, y + i)],
+               fill=(int(120 + (70 - 120) * t), int(128 + (80 - 128) * t),
+                     int(140 + (95 - 140) * t)))
+    d.ellipse([x + 6, y + 8, x + 52, y + h - 8], fill=(200, 60, 60))
+    d.line([(x + 14, y + 12), (x + 44, y + h - 12)], fill=(120, 20, 20),
+           width=3)
+    d.line([(x + 44, y + 12), (x + 14, y + h - 12)], fill=(120, 20, 20),
+           width=3)
+    d.ellipse([x + w - 52, y + 10, x + w - 8, y + h - 10], fill=(50, 110, 200))
+    d.line([(x + w - 44, y + 14), (x + w - 16, y + h - 14)],
+           fill=(20, 60, 140), width=3)
 
 
 def build():
-    img = Image.new("RGB", (W, H), PAPER)
+    img = Image.new("RGB", (W, H), CREAM)
     d = ImageDraw.Draw(img)
-    M = 28
-    X1 = W - M
+    mx = 28  # side margin
 
-    # ---- masthead ----
-    f_mast = font(SERIF_B, 62)
+    # Masthead.
     title = "The World in One Picture"
-    tw = d.textlength(title, font=f_mast)
-    d.text(((W - tw) / 2, 18), title, font=f_mast, fill=INK)
-    rule(d, M, 96, X1, 3)
-    rule(d, M, 102, X1, 1)
-    f_date = font(SANS_B, 22)
-    d.text((M, 114), "THURSDAY 26 NOVEMBER 2026", font=f_date, fill=RED)
-    f_tag = font(SANS, 19)
+    f_title = SERIF_B(62)
+    d.text(((W - d.textlength(title, font=f_title)) / 2, 18), title,
+           font=f_title, fill=INK)
+    d.line([(mx, 100), (W - mx, 100)], fill=RULE, width=3)
+    d.line([(mx, 106), (W - mx, 106)], fill=RULE, width=1)
+
+    # Dateline row.
+    f_date = SANS_B(24)
+    d.text((mx, 116), "THURSDAY 26 NOVEMBER 2026", font=f_date, fill=RED)
     tag = "THE DAY'S WORLD NEWS, IN ONE IMAGE"
-    d.text((X1 - d.textlength(tag, font=f_tag), 116), tag, font=f_tag, fill=GREY)
+    f_tag = SANS(19)
+    d.text((W - mx - d.textlength(tag, font=f_tag), 119), tag,
+           font=f_tag, fill=GRAY)
 
-    # ---- hero: panel left, headline right ----
-    hy = 150
-    hero_panel(d, (M, hy, 528, hy + 302))
-    d.text((M, hy + 308), "An Iranian drone attack on a Kuwait air-defence site, Thursday.",
-           font=font(SANS, 16), fill=GREY)
-    hx = 552
-    d.text((hx, hy + 2), "THE GULF", font=font(SANS_B, 22), fill=RED)
-    y = para(d, "DRONES OVER KUWAIT", font(SERIF_B, 48), hx, hy + 30, X1 - hx,
-             52)
-    y = para(d, "Two Italians killed as drones hit a Kuwait air-defence site",
-             font(SERIF_B, 25), hx, y + 8, X1 - hx, 31)
-    y = para(d, "Two Rheinmetall Italia technicians, 36 and 65, were servicing "
-                "Skyguard radar when the site was hit. Two more wounded; "
-                "Tehran denies any role.",
-             font(SERIF, 19), hx, y + 10, X1 - hx, 24)
-    rule(d, M, 508, X1, 2)
+    # Hero: night panel left, headline block right.
+    hx, hy, hw, hh = mx, 146, 490, 284
+    night_panel(d, hx, hy, hw, hh)
+    tx = hx + hw + 18
+    tw = W - mx - tx
+    d.text((tx, hy + 2), "THE GULF", font=SANS_B(25), fill=RED)
+    y = hy + 34
+    for line in ("DRONES OVER", "KUWAIT"):
+        d.text((tx, y), line, font=SERIF_B(58), fill=INK)
+        y += 62
+    y = para(d, tx, y + 8,
+             "Two Italians killed as drones hit a Kuwait air-defence site",
+             SERIF_B(27), tw, 32)
+    para(d, tx, y + 6,
+         "Two Rheinmetall Italia technicians, 36 and 65, were servicing "
+         "Skyguard radar when the site was hit. Two more wounded; Tehran "
+         "denies any role.",
+         SERIF(21), tw, 26)
+    d.text((hx, hy + hh + 8),
+           "An Iranian drone attack on a Kuwait air-defence site, Thursday.",
+           font=SERIF(17), fill=GRAY)
 
-    # ---- middle row: Gaza | Ebola ----
-    my = 522
-    col_w = (X1 - M - 24) // 2
-    # Gaza, left column
-    gaza_panel(d, (M, my, M + col_w, my + 84))
-    gy = para(d, "ISRAEL KILLS HAMAS MINISTER IN GAZA STRIKES",
-              font(SERIF_B, 26), M, my + 92, col_w, 29)
-    para(d, "At least 9 killed overnight, including deputy education minister "
-            "Khaled Abu Nada and his wife in Deir al-Balah — a third straight "
-            "night of strikes despite a year-old ceasefire.",
-         font(SERIF, 18), M, gy + 4, col_w, 22)
-    # Ebola, right column
-    ex = M + col_w + 24
-    ebola_panel(d, (ex, my, ex + col_w, my + 84))
-    ey = para(d, "EBOLA PASSES 12,000 CASES IN CONGO",
-              font(SERIF_B, 26), ex, my + 92, col_w, 29)
-    para(d, "12,021 confirmed cases in the east, and nearly half of them have "
-            "died — the fastest-growing Ebola outbreak in history, the health "
-            "ministry says. No approved vaccine for this strain.",
-         font(SERIF, 18), ex, ey + 4, col_w, 22)
-    rule(d, M, 788, X1, 2)
+    d.line([(mx, 470), (W - mx, 470)], fill=RULE, width=1)
 
-    # ---- EU strip ----
-    eu_stars(d, M + 42, 842, 26)
-    para(d, "EU DEADLOCKED ON €1.58 TRILLION BUDGET",
-         font(SERIF_B, 27), M + 104, 802, X1 - M - 104, 33)
-    para(d, "Leaders fail to agree after 12 hours in Brussels; no deal on Thursday. "
-            "Next try: 17–18 December. A $49bn loan for Ukraine is stuck too.",
-         font(SERIF, 18), M + 104, 840, X1 - M - 104, 22)
-    rule(d, M, 896, X1, 2)
+    # Middle panels.
+    py, ph = 482, 114
+    city_panel(d, mx, py, 480, ph)
+    virus_panel(d, mx + 488, py, 480, ph)
 
-    # ---- Macy's strip ----
-    macys_panel(d, (M, 908, M + 250, 908 + 72))
-    para(d, "NO PARADE ON THANKSGIVING",
-         font(SERIF_B, 24), M + 270, 908, X1 - M - 270, 30)
-    para(d, "The 100th Macy's parade is postponed for the first time ever — a "
-            "nor'easter gusting to 60 mph moves it to Saturday 28 November.",
-         font(SERIF, 17), M + 270, 940, X1 - M - 270, 21)
+    # Middle headlines and bodies, two columns.
+    col_w = 480
+    y = 606
+    for line in ("ISRAEL KILLS HAMAS", "MINISTER IN GAZA STRIKES"):
+        d.text((mx, y), line, font=SERIF_B(30), fill=INK)
+        y += 34
+    para(d, mx, 678,
+         "At least 9 killed overnight, including deputy education minister "
+         "Khaled Abu Nada and his wife in Deir al-Balah — a third straight "
+         "night of strikes despite a year-old ceasefire.",
+         SERIF(20), col_w, 24)
+    y = 606
+    for line in ("EBOLA PASSES 12,000 CASES", "IN CONGO"):
+        d.text((mx + 488, y), line, font=SERIF_B(30), fill=INK)
+        y += 34
+    para(d, mx + 488, 678,
+         "12,021 confirmed cases in the east, and nearly half of them have "
+         "died — the fastest-growing Ebola outbreak in history, the health "
+         "ministry says. No approved vaccine for this strain.",
+         SERIF(20), col_w, 24)
 
-    # ---- footer briefs ----
-    rule(d, M, 992, X1, 1)
-    d.text((M, 998), "ALSO: Houthis claim strikes on Jeddah and Jazan  ·  Serbia votes "
-                     "27 Dec  ·  Russia OKs record military budget",
-           font=font(SANS, 14), fill=GREY)
+    d.line([(mx, 812), (W - mx, 812)], fill=RULE, width=1)
+
+    # EU row.
+    eu_flag(d, mx, 824, 64)
+    d.text((mx + 80, 824), "EU DEADLOCKED ON €1.58 TRILLION BUDGET",
+           font=SERIF_B(30), fill=INK)
+    para(d, mx + 80, 860,
+         "Leaders fail to agree after 12 hours in Brussels; no deal on "
+         "Thursday. Next try: 17–18 December. A $49bn loan for Ukraine is "
+         "stuck too.",
+         SERIF(20), W - mx - (mx + 80), 24)
+
+    d.line([(mx, 906), (W - mx, 906)], fill=RULE, width=1)
+
+    # Macy's row.
+    balloons(d, mx, 914, 64, 58)
+    d.text((mx + 80, 914), "NO PARADE ON THANKSGIVING",
+           font=SERIF_B(30), fill=INK)
+    para(d, mx + 80, 948,
+         "The 100th Macy's parade is postponed for the first time ever — a "
+         "nor'easter gusting to 60 mph moves it to Saturday 28 November.",
+         SERIF(20), W - mx - (mx + 80), 23)
+
+    d.line([(mx, 996), (W - mx, 996)], fill=RULE, width=1)
+    d.text((mx, 1004),
+           "ALSO: Houthis claim strikes on Jeddah and Jazan · Serbia votes "
+           "27 Dec · Russia OKs record military budget",
+           font=SANS(16), fill=GRAY)
     return img
 
 
 if __name__ == "__main__":
-    build().save("entry.png", optimize=True)
+    page = build()
+    page.save("entry.png", format="PNG")
+    print("wrote entry.png", page.size)

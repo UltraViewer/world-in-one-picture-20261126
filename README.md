@@ -4,36 +4,49 @@
 [![reward](https://make.fun/badge/news-image-20261126/UltraViewer/world-in-one-picture-20261126/reward.svg)](https://make.fun/bounty/news-image-20261126)
 [![make.fun](https://make.fun/badge/news-image-20261126.svg)](https://make.fun/bounty/news-image-20261126)
 
-A newspaper front page summing up Thursday 26 November 2026 in one image,
-drawn from scratch with PIL — no photos, no network, no invented numbers.
-Every figure on the page was checked against Reuters / AP / BBC / DW
-reporting of that day.
+A one-page newspaper front page that sums up Thursday 26 November 2026
+in a single 1024×1024 image, drawn entirely with Pillow shapes and
+Liberation fonts — no photos, no network calls, no fetched assets.
 
-## The day's stories
+## What is on the page
 
-- **Drones over Kuwait (lead)** — Two Rheinmetall Italia technicians, aged
-  36 and 65, were killed when Iranian drones struck a Kuwait air-defence
-  site where they serviced Skyguard radar. Two more were wounded. Iran
-  denies any role. (Reuters, BBC)
-- **Gaza** — Israeli strikes killed at least 9 Palestinians overnight,
-  including Hamas deputy education minister Khaled Abu Nada and his wife
-  in Deir al-Balah — a third straight night of strikes despite a
-  year-old ceasefire. (Reuters)
-- **Congo** — Ebola passed 12,000 confirmed cases: 12,021, nearly half
-  of them dead — the fastest-growing Ebola outbreak in history. (AP)
-- **Brussels** — EU leaders deadlocked after 12 hours over the €1.58
-  trillion 2028–2034 budget; next try 17–18 December. A $49bn loan for
-  Ukraine is stuck too. (Reuters, AP)
-- **New York** — The 100th Macy's Thanksgiving Day Parade is postponed
-  for the first time ever; a nor'easter gusting to 60 mph moves it to
-  Saturday 28 November. (NBC)
+- **DRONES OVER KUWAIT** — two Rheinmetall Italia technicians (36 and 65)
+  killed servicing Skyguard radar at a Kuwait air-defence site; two more
+  wounded; Tehran denies any role.
+- **ISRAEL KILLS HAMAS MINISTER IN GAZA STRIKES** — at least 9 killed
+  overnight, including deputy education minister Khaled Abu Nada and his
+  wife in Deir al-Balah; a third straight night of strikes despite a
+  year-old ceasefire.
+- **EBOLA PASSES 12,000 CASES IN CONGO** — 12,021 confirmed cases in the
+  east, nearly half dead; the fastest-growing Ebola outbreak in history.
+- **EU DEADLOCKED ON €1.58 TRILLION BUDGET** — 12 hours in Brussels with
+  no deal; next attempt 17–18 December; a $49bn Ukraine loan is stuck.
+- **NO PARADE ON THANKSGIVING** — the 100th Macy's parade postponed for
+  the first time ever as a nor'easter gusts to 60 mph; moved to Saturday
+  28 November.
+- Footer briefs: Houthis claim strikes on Jeddah and Jazan, Serbia votes
+  27 December, Russia approves a record military budget.
+
+Every figure on the page was checked against 26 November reporting; no
+numbers were invented.
+
+## Files
+
+- `compose.py` — draws `entry.png` from scratch (run it to regenerate).
+- `main.py` — the entry point. It only validates the pre-rendered
+  `entry.png` (PNG signature, IHDR, 1024×1024, ≤ 1 MiB) and copies it to
+  `MAKEFUN_OUTPUT_DIR` (default `/output`). It imports nothing beyond
+  the standard library.
+- `entry.png` — the finished front page, 1024×1024. Running
+  `compose.py` twice produces byte-identical output.
 
 ## Run
 
 ```sh
-python3 main.py   # writes /output/entry.png (1024x1024, deterministic)
+python3 compose.py   # regenerate entry.png
+python3 main.py      # copy entry.png to /output/entry.png
 ```
 
 ## License
 
-MIT — see LICENSE.
+MIT — see `LICENSE`.
